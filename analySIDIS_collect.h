@@ -180,7 +180,7 @@ Multiplicities fMultiplicities_yavg[9][12];
 Multiplicities fMultiplicities_theta_yavg[9][12][8];
 Multiplicities fMultiplicities_pt_yavg[9][12];
 Multiplicities fMultiplicities_zvtx_yavg[9][12][4];
-Multiplicities fMultiplicities_prd_yavg[9][12][4];
+Multiplicities fMultiplicities_prd_yavg[9][12][11];
 Multiplicities fMultiplicities_zavg[9];
 Wrapper fDiffractiveVectorMeson[9][6][12];
 Wrapper fAcceptance[11][9][6][12];
@@ -224,7 +224,7 @@ studyxy fR_xy[24];
 //Graphic Style
 
 int fMarkerColor[6] = {2,95,209,226,4,221};
-int fMarkerColorprd[11][2] = {{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue-2,kBlue+1},{kBlue-6,kGreen-3},{kBlue-8,kOrange-3},{kBlue-10,kRed+1}};
+int fMarkerColorprd[11][2] = {{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue,kRed},{kBlue,kMagenta-3},{kBlue-2,kBlue+1},{kBlue-6,kGreen-3},{kBlue-8,kOrange-3},{kBlue-10,kRed+1}};
 int fMarkerColorZvtx[4][2] = {{kBlue,kRed+1},{kBlue-7,kBlue+1},{kBlue-9,kGreen-3},{kBlue-10,kOrange-3}};
 // int fMarkerColortheta[8][2] = {{kBlue,kRed},{kBlue-2,kRed-2},{kBlue-4,kRed-4},{kBlue-5,kRed-5},{kBlue-6,kRed-6},{kBlue-7,kRed-7},{kBlue-9,kRed-9},{kBlue-10,kRed-10}};
 int fMarkerStyle[6][2] = {{20,20},{26,22},{25,21},{27,33},{28,34},{30,29}};

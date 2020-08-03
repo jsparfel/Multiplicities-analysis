@@ -23,13 +23,9 @@
 #define proton_sirc "data/proton_semi_inclusive_RC.txt"
 #define irc_qel "data/sigtot_RC_wqel.dat"
 #define irc_noqel "data/sigtot_RC_woqel.dat"
-#define DVM_2006 "data/DVM_2006.dat"
 #define DVM_2016 "data/DVM_2016.dat"
 
 // Flags
-#define Y2006 0
-#define Y2012 0
-#define Y2016 1
 #define DVMC 0
 #define SIRC 0
 #define NO_ACC 1
@@ -319,18 +315,9 @@ void LoadSemiInclusiveRadiativeCorrection()
           for(int l=0; l<7; l++)
           {
             proton >> sdum;
-#ifdef DEBUG
-            cout << sdum << "\t";
-#endif
           }
           proton >> fSemiInclusiveRCproton[c][i][j][k];
-#ifdef DEBUG
-          cout << fSemiInclusiveRCproton[c][i][j][k] << "\t";
-#endif
           proton >> sdum;
-#ifdef DEBUG
-          cout << sdum << endl;
-#endif
         }
       }
     }
@@ -394,29 +381,13 @@ void LoadQelCorr()
         fQelCorr[i][j] = (cnoqel[i][j]+cnoqel[i-1][j]+cnoqel[i][j+1]+cnoqel[i-1][j+1])/(cqel[i][j]+cqel[i-1][j]+cqel[i][j+1]+cqel[i-1][j+1]);
       else if(i==8 && j>1)
         fQelCorr[i][j] = (cnoqel[i][j]+cnoqel[i-1][j])/(cqel[i][j]+cqel[i-1][j]);
-
-      // cout << fQelCorr[i][j] << " ";
     }
-    // cout << endl;
   }
 }
 
 Float_t GetSemiInclusiveRadiativeCorrection(int ch, int xb, int yb, int zb)
 {
-  if(Y2006 || !SIRC)
-  {
-    return 1;
-  }
-  else if(Y2012 || Y2016)
-  {
-    return fSemiInclusiveRCproton[ch][xb][yb][zb];
-    // return fSemiInclusiveRCproton[ch][xb][yb][zb]/fQelCorr[xb][yb];
-  }
-  else
-  {
-    cout << "ERROR in GetSemiInclusiveRadiativeCorrection : Year not recognized. No correction applied." << endl;
-    return 1;
-  }
+  return fSemiInclusiveRCproton[ch][xb][yb][zb];
 }
 
 void LoadDiffVectorMesonCorrection()
@@ -569,14 +540,11 @@ void yweightedavg()
             {
               if(fMultiplicities_prd[x][i][z][period].tab[c][0][l])
               {
-                // cout << "fMultiplicities_prd[" << x << "][" << i << "][" << z << "][" << period << "].tab[" << c << "][0][" << l << "] = " << fMultiplicities_prd[x][i][z][period].tab[c][0][l] << endl;
                 fMultiplicities_prd_yavg[x][z][period].tab[c][0][l]+=fMultiplicities_prd[x][i][z][period].tab[c][0][l]/fMultiplicities_prd[x][i][z][period].tab[c][1][l];
                 fMultiplicities_prd_yavg[x][z][period].tab[c][1][l]+=1/fMultiplicities_prd[x][i][z][period].tab[c][1][l];
                 fMultiplicities_prd_yavg[x][z][period].tab[c][2][l]+=1/fMultiplicities_prd[x][i][z][period].tab[c][2][l];
               }
-              // cout << "fMultiplicities_prd_yavg[" << x << "][" << z << "][" << period << "].tab[" << c << "][0][" << l << "] = " << fMultiplicities_prd_yavg[x][z][period].tab[c][0][l] << endl;
             }
-
           }
           if(fMultiplicities_yavg[x][z].tab[c][0][l])
           {
@@ -613,14 +581,12 @@ void yweightedavg()
           }
           for(auto period : fPeriods)
           {
-            // if(c==0 && l == 3) cout << "Before : fMultiplicities_prd_yavg[" << x << "][" << z << "][" << period << "].tab[" << c << "][0][" << l << "] = " << fMultiplicities_prd_yavg[x][z][period].tab[c][0][l] << endl;
             if(fMultiplicities_prd_yavg[x][z][period].tab[c][0][l])
             {
               fMultiplicities_prd_yavg[x][z][period].tab[c][1][l]=1/fMultiplicities_prd_yavg[x][z][period].tab[c][1][l];
               fMultiplicities_prd_yavg[x][z][period].tab[c][2][l]=1/fMultiplicities_prd_yavg[x][z][period].tab[c][2][l];
               fMultiplicities_prd_yavg[x][z][period].tab[c][0][l]*=fMultiplicities_prd_yavg[x][z][period].tab[c][1][l];
             }
-            // if(c==0 && l == 3) cout << "After : fMultiplicities_prd_yavg[" << x << "][" << z << "][" << period << "].tab[" << c << "][0][" << l << "] = " << fMultiplicities_prd_yavg[x][z][period].tab[c][0][l] << endl;
           }          
         }
       }
@@ -768,16 +734,9 @@ int main(int argc, char **argv)
     }
     if (string(argv[i])=="-q") verbose = 0;
   }
-
-
-  //q_bin x_bin y_bin z_bin acc_pi acc_error_pi acc_k acc_error_k acc_p acc_error_p acc_h acc_error_h
-
-  int year=0;
   fNumberPeriod=0;
 
-  if(Y2006) year=2006;
-  else if(Y2012) year=2012;
-  else if(Y2016) year=2016;
+  int year = 2016;
 
   float dummy;
 

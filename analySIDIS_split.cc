@@ -3,25 +3,13 @@
 using namespace std;
 
 //Inputs : should be in ./data/
-#define mat_RICH_2006_name "data/rich_mat_2006.txt"
 #define mat_RICH_2016_name "data/rich_mat_2016_julien.txt"
 #define err_RICH_name "data/rich_mat_error_julien.txt"
-#define target_file_2012 "data/target-107924-109081.dat"
-#define target_file_2016 "data/target-274508-274901.dat"
-#define proton_sirc "data/proton_semi_inclusive_RC.txt"
-#define proton_irc "data/hh160_r1998_f2tulay_compass_grv.asy_hcorr.txt"
-#define ElectronPi "data/electron_pion_contamination.txt"
-#define ElectronPiVtx "data/electron_pion_contamination_vtx.txt"
-#define ElectronPiTheta "data/electron_pion_contamination_Theta.txt"
-#define ElectronPipT "data/electron_pion_contamination_pT.txt"
 
 //Input data : root files to be treated should be e.g. in data_path/P09/
 #define data_path "/sps/compass/julien"
 
 // Flags 
-#define Y2006 0
-#define Y2012 0
-#define Y2016 1 // to treat 2016 data
 #define MOMENTUM_DOWN 12
 #define MOMENTUM_UP 40
 #define XMIN 0.004
@@ -31,9 +19,6 @@ using namespace std;
 #define HXX0LIMIT 15
 #define MUCHARGE_SEPARATION 0
 #define MUCHARGE 1
-
-#define IRC 0 // IRC and SIRC seem to have no effect here : function Get(Semi)InclusiveRadiativeCorrection always returns 1, i.e. no correction
-#define SIRC 0
 #define RICH 1 // Corrects hadron counts with the RICH matrix
 
 // Progress bar
@@ -105,602 +90,7 @@ void fusionSort(Float_t* tab, Int_t len)
       fusionSort2(tab, 0, len-1);
 }
 
-
-// Target Management : this part of the code is useless for 2016 data : target management is handled by phast
-
-void InitTargetFile(string pfile)
-{
-  char tstr[500];
-  std::ifstream fin;
-  sprintf(tstr,pfile.c_str());
-  cout<<"INFO : Opening target cell description: "<<tstr<<"..."<<endl;
-  fin.open(tstr);
-  if (fin.fail()) 
-  {
-    cerr << "\nERROR accessing Target file \""<< pfile <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-  while(fin.is_open() && !fin.eof())
-  {
-    float z, x, y, r, dummy;
-    fin >> z >> dummy >> dummy >> dummy >> dummy >> r >> dummy >> x >> y;
-    fZv.push_back(z);
-    fXv.push_back(x);
-    fYv.push_back(y);
-    fRv.push_back(r);
-  }
-  cout<<"INFO : Target cell description loaded"<<endl;
-}
-
-void CellCenter(Float_t z, Float_t& xc, Float_t& yc, Float_t& R)
-{
-  xc = 1000000;
-  yc = 1000000;
-
-  for(Int_t i = 0; i < int(fZv.size()-1); i++)
-  {
-    Float_t z1 = fZv[i];
-    Float_t z2 = fZv[i+1];
-
-    if( z2 < z ) continue;
-    if( z1 > z ) continue;
-
-    Float_t xc1 = fXv[i];
-    Float_t xc2 = fXv[i+1];
-
-    Float_t yc1 = fYv[i];
-    Float_t yc2 = fYv[i+1];
-
-    Float_t rc1 = fRv[i];
-    Float_t rc2 = fRv[i+1];
-
-    Float_t dxcdz = (xc2-xc1)/(z2-z1);
-    Float_t dycdz = (yc2-yc1)/(z2-z1);
-    Float_t drcdz = (rc2-rc1)/(z2-z1);
-
-    Float_t dz = z-z1;
-    xc = xc1 + dxcdz*dz;
-    yc = yc1 + dycdz*dz;
-    R = rc1 + drcdz*dz;
-
-    break;
-  }
-}
-
-bool InTarget(Float_t xvtx, Float_t yvtx, Float_t zvtx)
-{
-  Float_t xc, yc, R;
-  CellCenter(zvtx, xc, yc, R);
-  Float_t dx = xvtx-xc;
-  Float_t dy = yvtx-yc;
-  Float_t r = sqrt(dx*dx + dy*dy);
-
-  return( r < 1.9 && yvtx < 1.2 );
-}
-
-// Radiative Corrections : this part of the code seems to be useless : function Get(Semi)InclusiveRadiativeCorrection always returns 1, i.e. no correction
-
-void LoadInclusiveRadiativeCorrection()
-{
-  string sdum;
-
-  ifstream proton(proton_irc);
-  if (proton.fail()) 
-  {
-    cerr << "\nERROR accessing IRC file \""<< proton_irc <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-  for(int i=0; i<19; i++)
-  {
-    for(int j=0; j<5; j++)
-    {
-      proton >> sdum;
-#ifdef DEBUG
-      cout << sdum << "\t";
-#endif
-
-      for(int k=0; k<6; k++)
-      {
-        proton >> fInclusiveRCproton[k+j*6][i] >> sdum;
-#ifdef DEBUG
-        cout << " " << fInclusiveRCproton[k+j*6][i] << sdum;
-#endif
-      }
-
-#ifdef DEBUG
-      cout << endl;
-#endif
-    }
-  }
-  proton.close();
-}
-
-void LoadSemiInclusiveRadiativeCorrection()
-{
-  string sdum;
-
-  ifstream proton(proton_sirc);
-  if (proton.fail()) 
-  {
-    cerr << "\nERROR accessing SIRC file \""<< proton_sirc <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-
-  for(int i=0; i<9; i++)
-  {
-    for(int j=0; j<6; j++)
-    {
-      for(int k=0; k<14; k++)
-      {
-        for(int l=0; l<7; l++)
-        {
-          proton >> sdum;
-#ifdef DEBUG
-          cout << sdum << "\t";
-#endif
-        }
-        proton >> fSemiInclusiveRCproton[i][j][k];
-#ifdef DEBUG
-        cout << fSemiInclusiveRCproton[i][j][k] << "\t";
-#endif
-        proton >> sdum;
-#ifdef DEBUG
-        cout << sdum << endl;
-#endif
-      }
-    }
-  }
-  proton.close();
-}
-
-Float_t GetInclusiveRadiativeCorrection(Float_t x, Float_t y)
-{
-  if(Y2006 || !IRC)
-  {
-    return 1;
-  }
-  else if(Y2012 || Y2016)
-  {
-    return 1;
-  }
-  else
-  {
-    cout << "ERROR in GetInclusiveRadiativeCorrection : Year not recognized. No correction applied." << endl;
-    return 1;
-  }
-}
-
-Float_t GetSemiInclusiveRadiativeCorrection(Float_t x, Float_t y, Float_t z)
-{
-  if(Y2006 || !SIRC)
-  {
-    return 1;
-  }
-  else if(Y2012 || Y2016)
-  {
-    return 1;
-  }
-  else
-  {
-    cout << "ERROR in GetSemiInclusiveRadiativeCorrection : Year not recognized. No correction applied." << endl;
-    return 1;
-  }
-}
-
-// Electron-pion correction : this part of the code seems to be useless : arrays fCepi, fCepiVtx etc. are not used in the rest of the code
-
-void LoadElectronCorrection()
-{
-  ifstream epi(ElectronPi);
-  if (epi.fail()) 
-  {
-    cerr << "\nERROR accessing ElectronPion file \""<< ElectronPi <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-
-  for(int c=0; c<2; c++)
-  {
-    for(int i=0; i<9; i++)
-    {
-      for(int j=0; j<6; j++)
-      {
-        for(int k=0; k<12; k++)
-        {
-          epi >> fCepi[c][1][i][j][k] >> fCepi[c][0][i][j][k];
-          // cout << fCepi[c][1][i][j][k] << " " << fCepi[c][0][i][j][k] << endl;
-        }
-      }
-    }
-  }
-
-  epi.close();
-
-  ifstream epiVtx(ElectronPiVtx);
-  if (epiVtx.fail()) 
-  {
-    cerr << "\nERROR accessing ElectronPion Vtx file \""<< ElectronPiVtx <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-
-  for(int c=0; c<2; c++)
-  {
-    for(int i=0; i<9; i++)
-    {
-      for(int j=0; j<6; j++)
-      {
-        for(int k=0; k<12; k++)
-        {
-          for(int zv=0; zv<4; zv++)
-          {
-            epiVtx >> fCepiVtx[c][1][i][j][k][zv] >> fCepiVtx[c][0][i][j][k][zv];
-            // cout << fCepiVtx[c][1][i][j][k][zv] << " " << fCepiVtx[c][0][i][j][k][zv] << endl;
-          }
-        }
-      }
-    }
-  }
-
-  epiVtx.close();
-
-  ifstream epiTheta(ElectronPiTheta);
-  if (epiTheta.fail()) 
-  {
-    cerr << "\nERROR accessing ElectronPion Theta file \""<< ElectronPiTheta <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-
-  for(int c=0; c<2; c++)
-  {
-    for(int i=0; i<9; i++)
-    {
-      for(int j=0; j<6; j++)
-      {
-        for(int k=0; k<12; k++)
-        {
-          for(int th=0; th<8; th++)
-          {
-            epiTheta >> fCepiTh[c][1][i][j][k][th] >> fCepiTh[c][0][i][j][k][th];
-          }
-        }
-      }
-    }
-  }
-
-  epiTheta.close();
-
-  ifstream epipT(ElectronPipT);
-  if (epipT.fail()) 
-  {
-    cerr << "\nERROR accessing ElectronPion pT file \""<< ElectronPipT <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-
-  for(int c=0; c<2; c++)
-  {
-    for(int i=0; i<9; i++)
-    {
-      for(int j=0; j<6; j++)
-      {
-        for(int k=0; k<12; k++)
-        {
-          for(int pt=0; pt<10; pt++)
-          {
-            epipT >> fCepipT[c][1][i][j][k][pt] >> fCepipT[c][0][i][j][k][pt];
-          }
-        }
-      }
-    }
-  }
-
-  epipT.close();
-
-}
-
 // RICH matrix correction : load RICH matrix file, build the matrix and invert it
-
-void load_rich_mat_2006(string prich, string prich_err) // load RICH matrix for 2006 data
-{
-
-  pi_sigma_uni[0][0] = 1;
-  k_sigma_uni[1][1] = 1;
-  p_sigma_uni[2][2] = 1;
-  pi_vect[0][0] = 1;
-  k_vect[1][0] = 1;
-  p_vect[2][0] = 1;
-
-  for(int i=0; i<2; i++)
-  {
-    for(int j=0; j<10; j++)
-    {
-      rich_mat_p[i][j].ResizeTo(3,3);
-      rich_mat_m[i][j].ResizeTo(3,3);
-      inv_rich_p[i][j].ResizeTo(3,3);
-      inv_rich_m[i][j].ResizeTo(3,3);
-    }
-  }
-
-  for(int i=0; i<3; i++)
-  {
-    for(int j=0; j<3; j++)
-    {
-      err_rich_p[i][j].ResizeTo(3,3);
-      err_rich_m[i][j].ResizeTo(3,3);
-    }
-  }
-
-  ifstream matRICH(prich);
-  if (matRICH.fail()) 
-  {
-    cerr << "\nERROR accessing RICH 2006 matrix \""<< prich <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-
-  for(int i=0; i<24; i++)
-  {
-    if(i < 4)
-    {
-      for(int j=0; j<20; j++)
-        matRICH >> dummy;
-    }
-    else
-    {
-      matRICH >> mat_bin[0][i] >> mat_bin[1][i];
-      for(int j=0; j<9; j++)
-      {
-        matRICH >> rich_mat_p[i%2][(i-4)/2][(int)j/3][j%3];
-      }
-      for(int j=0; j<9; j++)
-      {
-        matRICH >> rich_mat_m[i%2][(i-4)/2][(int)j/3][j%3];
-      }
-    }
-  }
-
-  matRICH.close();
-
-  for(int i=0; i<10; i++)
-  {
-    cout << rich_mat_p[0][i][0][0] << " " << rich_mat_p[0][i][0][1] << " " << rich_mat_p[0][i][0][2] << endl;
-    cout << rich_mat_p[0][i][1][0] << " " << rich_mat_p[0][i][1][1] << " " << rich_mat_p[0][i][1][2] << endl;
-    cout << rich_mat_p[0][i][2][0] << " " << rich_mat_p[0][i][2][1] << " " << rich_mat_p[0][i][2][2] << endl;
-
-    cout << endl;
-
-    cout << rich_mat_p[1][i][0][0] << " " << rich_mat_p[1][i][0][1] << " " << rich_mat_p[1][i][0][2] << endl;
-    cout << rich_mat_p[1][i][1][0] << " " << rich_mat_p[1][i][1][1] << " " << rich_mat_p[1][i][1][2] << endl;
-    cout << rich_mat_p[1][i][2][0] << " " << rich_mat_p[1][i][2][1] << " " << rich_mat_p[1][i][2][2] << endl;
-
-    cout << endl;
-
-    cout << rich_mat_m[0][i][0][0] << " " << rich_mat_m[0][i][0][1] << " " << rich_mat_m[0][i][0][2] << endl;
-    cout << rich_mat_m[0][i][1][0] << " " << rich_mat_m[0][i][1][1] << " " << rich_mat_m[0][i][1][2] << endl;
-    cout << rich_mat_m[0][i][2][0] << " " << rich_mat_m[0][i][2][1] << " " << rich_mat_m[0][i][2][2] << endl;
-
-    cout << endl;
-
-    cout << inv_rich_m[1][i][0][0] << " " << inv_rich_m[1][i][0][1] << " " << inv_rich_m[1][i][0][2] << endl;
-    cout << inv_rich_m[1][i][1][0] << " " << inv_rich_m[1][i][1][1] << " " << inv_rich_m[1][i][1][2] << endl;
-    cout << inv_rich_m[1][i][2][0] << " " << inv_rich_m[1][i][2][1] << " " << inv_rich_m[1][i][2][2] << endl;
-
-    cout << endl;
-
-    inv_rich_p[0][i] = rich_mat_p[0][i].InvertFast();
-    inv_rich_p[1][i] = rich_mat_p[1][i].InvertFast();
-    inv_rich_m[0][i] = rich_mat_m[0][i].InvertFast();
-    inv_rich_m[1][i] = rich_mat_m[1][i].InvertFast();
-
-    cout << inv_rich_p[0][i][0][0] << " " << inv_rich_p[0][i][0][1] << " " << inv_rich_p[0][i][0][2] << endl;
-    cout << inv_rich_p[0][i][1][0] << " " << inv_rich_p[0][i][1][1] << " " << inv_rich_p[0][i][1][2] << endl;
-    cout << inv_rich_p[0][i][2][0] << " " << inv_rich_p[0][i][2][1] << " " << inv_rich_p[0][i][2][2] << endl;
-
-    cout << endl;
-
-
-    cout << inv_rich_p[1][i][0][0] << " " << inv_rich_p[1][i][0][1] << " " << inv_rich_p[1][i][0][2] << endl;
-    cout << inv_rich_p[1][i][1][0] << " " << inv_rich_p[1][i][1][1] << " " << inv_rich_p[1][i][1][2] << endl;
-    cout << inv_rich_p[1][i][2][0] << " " << inv_rich_p[1][i][2][1] << " " << inv_rich_p[1][i][2][2] << endl;
-
-    cout << endl;
-
-
-    cout << inv_rich_m[0][i][0][0] << " " << inv_rich_m[0][i][0][1] << " " << inv_rich_m[0][i][0][2] << endl;
-    cout << inv_rich_m[0][i][1][0] << " " << inv_rich_m[0][i][1][1] << " " << inv_rich_m[0][i][1][2] << endl;
-    cout << inv_rich_m[0][i][2][0] << " " << inv_rich_m[0][i][2][1] << " " << inv_rich_m[0][i][2][2] << endl;
-
-    cout << endl;
-
-    cout << rich_mat_m[1][i][0][0] << " " << rich_mat_m[1][i][0][1] << " " << rich_mat_m[1][i][0][2] << endl;
-    cout << rich_mat_m[1][i][1][0] << " " << rich_mat_m[1][i][1][1] << " " << rich_mat_m[1][i][1][2] << endl;
-    cout << rich_mat_m[1][i][2][0] << " " << rich_mat_m[1][i][2][1] << " " << rich_mat_m[1][i][2][2] << endl;
-
-    cout << endl;
-
-  }
-
-  // Errors YODO
-
-  ifstream errRICH(prich_err);
-  if (errRICH.fail()) 
-  {
-    cerr << "\nERROR accessing RICH ERROR matrix \""<< prich_err <<"\": " << strerror(errno) << endl;
-    abort();
-  }
-
-
-
-  for(int loop=0; loop<24; loop++)
-  {
-    if(loop < 4)
-    {
-      for(int j=0; j<38; j++)
-        errRICH >> dummy;
-    }
-    else
-    {
-      errRICH >> err_bin[0][loop-4] >> err_bin[1][loop-4];
-
-      errRICH >> err_rich_p[0][0][0][0];
-      errRICH >> err_rich_p[0][1][0][1];
-      errRICH >> err_rich_p[0][2][0][2];//3
-      errRICH >> err_rich_p[0][0][1][0];
-      errRICH >> err_rich_p[0][0][2][0];
-      errRICH >> err_rich_p[1][0][2][0];//6
-      errRICH >> err_rich_p[1][0][1][0];
-      errRICH >> err_rich_p[1][1][1][1];
-      errRICH >> err_rich_p[1][2][1][2];//9
-      errRICH >> err_rich_p[0][1][1][1];
-      errRICH >> err_rich_p[0][1][2][1];
-      errRICH >> err_rich_p[1][1][2][1];//12
-      errRICH >> err_rich_p[2][0][2][0];
-      errRICH >> err_rich_p[2][1][2][1];
-      errRICH >> err_rich_p[2][2][2][2];//15
-      errRICH >> err_rich_p[0][2][1][2];
-      errRICH >> err_rich_p[0][2][2][2];
-      errRICH >> err_rich_p[1][2][2][2];//18
-
-      err_rich_p[0][0][0][0] = pow(err_rich_p[0][0][0][0],2);
-      err_rich_p[0][1][0][1] = pow(err_rich_p[0][1][0][1],2);
-      err_rich_p[0][2][0][2] = pow(err_rich_p[0][2][0][2],2);
-      err_rich_p[1][0][1][0] = pow(err_rich_p[1][0][1][0],2);
-      err_rich_p[1][1][1][1] = pow(err_rich_p[1][1][1][1],2);
-      err_rich_p[1][2][1][2] = pow(err_rich_p[1][2][1][2],2);
-      err_rich_p[2][0][2][0] = pow(err_rich_p[2][0][2][0],2);
-      err_rich_p[2][1][2][1] = pow(err_rich_p[2][1][2][1],2);
-      err_rich_p[2][2][2][2] = pow(err_rich_p[2][2][2][2],2);
-
-      err_rich_p[0][0][1][0] = err_rich_p[1][0][0][0];
-      err_rich_p[0][0][2][0] = err_rich_p[2][0][0][0];
-      err_rich_p[1][0][2][0] = err_rich_p[2][0][1][0];
-
-      err_rich_p[0][1][1][1] = err_rich_p[1][1][0][1];
-      err_rich_p[0][1][2][1] = err_rich_p[2][1][0][1];
-      err_rich_p[1][1][2][1] = err_rich_p[2][1][1][1];
-
-      err_rich_p[0][2][1][2] = err_rich_p[1][2][0][2];
-      err_rich_p[0][2][2][2] = err_rich_p[2][2][0][2];
-      err_rich_p[1][2][2][2] = err_rich_p[2][2][1][2];
-
-      errRICH >> err_rich_m[0][0][0][0];
-      errRICH >> err_rich_m[0][1][0][1];
-      errRICH >> err_rich_m[0][2][0][2];//3
-      errRICH >> err_rich_m[0][0][1][0];
-      errRICH >> err_rich_m[0][0][2][0];
-      errRICH >> err_rich_m[1][0][2][0];//6
-      errRICH >> err_rich_m[1][0][1][0];
-      errRICH >> err_rich_m[1][1][1][1];
-      errRICH >> err_rich_m[1][2][1][2];//9
-      errRICH >> err_rich_m[0][1][1][1];
-      errRICH >> err_rich_m[0][1][2][1];
-      errRICH >> err_rich_m[1][1][2][1];//12
-      errRICH >> err_rich_m[2][0][2][0];
-      errRICH >> err_rich_m[2][1][2][1];
-      errRICH >> err_rich_m[2][2][2][2];//15
-      errRICH >> err_rich_m[0][2][1][2];
-      errRICH >> err_rich_m[0][2][2][2];
-      errRICH >> err_rich_m[1][2][2][2];//18
-
-      err_rich_m[0][0][0][0] = pow(err_rich_m[0][0][0][0],2);
-      err_rich_m[0][1][0][1] = pow(err_rich_m[0][1][0][1],2);
-      err_rich_m[0][2][0][2] = pow(err_rich_m[0][2][0][2],2);
-      err_rich_m[1][0][1][0] = pow(err_rich_m[1][0][1][0],2);
-      err_rich_m[1][1][1][1] = pow(err_rich_m[1][1][1][1],2);
-      err_rich_m[1][2][1][2] = pow(err_rich_m[1][2][1][2],2);
-      err_rich_m[2][0][2][0] = pow(err_rich_m[2][0][2][0],2);
-      err_rich_m[2][1][2][1] = pow(err_rich_m[2][1][2][1],2);
-      err_rich_m[2][2][2][2] = pow(err_rich_m[2][2][2][2],2);
-
-      err_rich_m[0][0][1][0] = err_rich_m[1][0][0][0];
-      err_rich_m[0][0][2][0] = err_rich_m[2][0][0][0];
-      err_rich_m[1][0][2][0] = err_rich_m[2][0][1][0];
-
-      err_rich_m[0][1][1][1] = err_rich_m[1][1][0][1];
-      err_rich_m[0][1][2][1] = err_rich_m[2][1][0][1];
-      err_rich_m[1][1][2][1] = err_rich_m[2][1][1][1];
-
-      err_rich_m[0][2][1][2] = err_rich_m[1][2][0][2];
-      err_rich_m[0][2][2][2] = err_rich_m[2][2][0][2];
-      err_rich_m[1][2][2][2] = err_rich_m[2][2][1][2];
-
-#ifdef DEBUG
-      for(int i=0; i<9; i++)
-      {
-        for(int j=0; j<9; j++)
-        {
-          cout << err_rich_p[i][j] << " ";
-        }
-        cout << endl;
-      }
-#endif
-
-      cout << "\n" << endl;
-
-      for(int i=0; i<3; i++)
-      {
-        cov1_pi[0][i] = 0;
-        cov1_pi[1][i] = 0;
-        cov1_k[0][i] = 0;
-        cov1_k[1][i] = 0;
-        cov1_p[0][i] = 0;
-        cov1_p[1][i] = 0;
-        cov2[0][i] = 0;
-        cov2[1][i] = 0;
-      }
-
-      for(int i=0; i<3; i++)
-      {
-        for(int j=0; j<3; j++)
-        {
-          cov1_pi[0][i] += pow(inv_rich_p[loop%2][(loop-4)/2][i][j]*pi_sigma_uni[j][j],2);
-          cov1_pi[1][i] += pow(inv_rich_m[loop%2][(loop-4)/2][i][j]*pi_sigma_uni[j][j],2);
-          cov1_k[0][i] += pow(inv_rich_p[loop%2][(loop-4)/2][i][j]*k_sigma_uni[j][j],2);
-          cov1_k[1][i] += pow(inv_rich_m[loop%2][(loop-4)/2][i][j]*k_sigma_uni[j][j],2);
-          cov1_p[0][i] += pow(inv_rich_p[loop%2][(loop-4)/2][i][j]*p_sigma_uni[j][j],2);
-          cov1_p[1][i] += pow(inv_rich_m[loop%2][(loop-4)/2][i][j]*p_sigma_uni[j][j],2);
-
-          for(int k=0; k<3; k++)
-          {
-            for(int l=0; l<3; l++)
-            {
-              for(int m=0; m<3; m++)
-              {
-                    cov2[0][i] += inv_rich_p[loop%2][(loop-4)/2][i][j]
-                                   *inv_rich_p[loop%2][(loop-4)/2][i][l]
-                                   *inv_rich_p[loop%2][(loop-4)/2][k][i]
-                                   *inv_rich_p[loop%2][(loop-4)/2][m][i]
-                                   *err_rich_p[j][k][l][m];
-#ifdef DEBUG
-                                  cout << err_rich_p[j*3+k][l*3+m] << endl;
-                                  cout << j*3+k << " " << l*3+m << endl;
-#endif
-                    cov2[1][i] += inv_rich_m[loop%2][(loop-4)/2][i][j]
-                                   *inv_rich_m[loop%2][(loop-4)/2][i][l]
-                                   *inv_rich_m[loop%2][(loop-4)/2][k][i]
-                                   *inv_rich_m[loop%2][(loop-4)/2][m][i]
-                                   *err_rich_m[j][k][l][m];
-              }
-            }
-          }
-        }
-        pi_unfolding_err_p[loop%2][(loop-4)/2][i] = cov1_pi[0][i] + cov2[0][i];
-        pi_unfolding_err_m[loop%2][(loop-4)/2][i] = cov1_pi[1][i] + cov2[1][i];
-        k_unfolding_err_p[loop%2][(loop-4)/2][i] = cov1_k[0][i] + cov2[0][i];
-        k_unfolding_err_m[loop%2][(loop-4)/2][i] = cov1_k[1][i] + cov2[1][i];
-        p_unfolding_err_p[loop%2][(loop-4)/2][i] = cov1_p[0][i] + cov2[0][i];
-        p_unfolding_err_m[loop%2][(loop-4)/2][i] = cov1_p[1][i] + cov2[1][i];
-      }
-    }
-  }
-
-  errRICH.close();
-}
 
 void load_rich_mat_2016(string prich, string prich_err) // load RICH matrix for 2016 data
 {
@@ -767,61 +157,10 @@ void load_rich_mat_2016(string prich, string prich_err) // load RICH matrix for 
 
   for(int i=0; i<10; i++)
   {
-
-    // cout << rich_mat_m[0][i][0][0] << " " << rich_mat_m[0][i][0][1] << " " << rich_mat_m[0][i][0][2] << endl;
-    // cout << rich_mat_m[0][i][1][0] << " " << rich_mat_m[0][i][1][1] << " " << rich_mat_m[0][i][1][2] << endl;
-    // cout << rich_mat_m[0][i][2][0] << " " << rich_mat_m[0][i][2][1] << " " << rich_mat_m[0][i][2][2] << endl;
-
-    // cout << endl;
-
-    // cout << rich_mat_p[0][i][0][0] << " " << rich_mat_p[0][i][0][1] << " " << rich_mat_p[0][i][0][2] << endl;
-    // cout << rich_mat_p[0][i][1][0] << " " << rich_mat_p[0][i][1][1] << " " << rich_mat_p[0][i][1][2] << endl;
-    // cout << rich_mat_p[0][i][2][0] << " " << rich_mat_p[0][i][2][1] << " " << rich_mat_p[0][i][2][2] << endl;
-
-    // cout << endl;
-
-    // cout << rich_mat_m[1][i][0][0] << " " << rich_mat_m[1][i][0][1] << " " << rich_mat_m[1][i][0][2] << endl;
-    // cout << rich_mat_m[1][i][1][0] << " " << rich_mat_m[1][i][1][1] << " " << rich_mat_m[1][i][1][2] << endl;
-    // cout << rich_mat_m[1][i][2][0] << " " << rich_mat_m[1][i][2][1] << " " << rich_mat_m[1][i][2][2] << endl;
-
-    // cout << endl;
-
-    // cout << rich_mat_p[1][i][0][0] << " " << rich_mat_p[1][i][0][1] << " " << rich_mat_p[1][i][0][2] << endl;
-    // cout << rich_mat_p[1][i][1][0] << " " << rich_mat_p[1][i][1][1] << " " << rich_mat_p[1][i][1][2] << endl;
-    // cout << rich_mat_p[1][i][2][0] << " " << rich_mat_p[1][i][2][1] << " " << rich_mat_p[1][i][2][2] << endl;
-
-    // cout << endl;
-
     inv_rich_p[0][i] = rich_mat_p[0][i].InvertFast();
     inv_rich_p[1][i] = rich_mat_p[1][i].InvertFast();
     inv_rich_m[0][i] = rich_mat_m[0][i].InvertFast();
     inv_rich_m[1][i] = rich_mat_m[1][i].InvertFast();
-
-    // cout << inv_rich_p[0][i][0][0] << " " << inv_rich_p[0][i][0][1] << " " << inv_rich_p[0][i][0][2] << endl;
-    // cout << inv_rich_p[0][i][1][0] << " " << inv_rich_p[0][i][1][1] << " " << inv_rich_p[0][i][1][2] << endl;
-    // cout << inv_rich_p[0][i][2][0] << " " << inv_rich_p[0][i][2][1] << " " << inv_rich_p[0][i][2][2] << endl;
-    //
-    // cout << endl;
-    //
-    //
-    // cout << inv_rich_p[1][i][0][0] << " " << inv_rich_p[1][i][0][1] << " " << inv_rich_p[1][i][0][2] << endl;
-    // cout << inv_rich_p[1][i][1][0] << " " << inv_rich_p[1][i][1][1] << " " << inv_rich_p[1][i][1][2] << endl;
-    // cout << inv_rich_p[1][i][2][0] << " " << inv_rich_p[1][i][2][1] << " " << inv_rich_p[1][i][2][2] << endl;
-    //
-    // cout << endl;
-    //
-    //
-    // cout << inv_rich_m[0][i][0][0] << " " << inv_rich_m[0][i][0][1] << " " << inv_rich_m[0][i][0][2] << endl;
-    // cout << inv_rich_m[0][i][1][0] << " " << inv_rich_m[0][i][1][1] << " " << inv_rich_m[0][i][1][2] << endl;
-    // cout << inv_rich_m[0][i][2][0] << " " << inv_rich_m[0][i][2][1] << " " << inv_rich_m[0][i][2][2] << endl;
-    //
-    // cout << endl;
-    //
-    // cout << inv_rich_m[1][i][0][0] << " " << inv_rich_m[1][i][0][1] << " " << inv_rich_m[1][i][0][2] << endl;
-    // cout << inv_rich_m[1][i][1][0] << " " << inv_rich_m[1][i][1][1] << " " << inv_rich_m[1][i][1][2] << endl;
-    // cout << inv_rich_m[1][i][2][0] << " " << inv_rich_m[1][i][2][1] << " " << inv_rich_m[1][i][2][2] << endl;
-    //
-    // cout << endl;
   }
 
   // Errors YODO
@@ -833,15 +172,8 @@ void load_rich_mat_2016(string prich, string prich_err) // load RICH matrix for 
     abort();
   }
 
-
-
   for(int loop=0; loop<20; loop++)
   {
-    /* if(loop < 4)
-    {
-      for(int j=0; j<38; j++)
-        errRICH >> dummy;
-    } */
     errRICH >> err_bin[0][loop] >> err_bin[1][loop];
 
     errRICH >> err_rich_p[0][0][0][0];
@@ -926,19 +258,6 @@ void load_rich_mat_2016(string prich, string prich_err) // load RICH matrix for 
     err_rich_m[0][2][2][2] = err_rich_m[2][2][0][2];
     err_rich_m[1][2][2][2] = err_rich_m[2][2][1][2];
 
-#ifdef DEBUG
-    for(int i=0; i<9; i++)
-    {
-    for(int j=0; j<9; j++)
-    {
-        cout << err_rich_p[i][j] << " ";
-    }
-    cout << endl;
-    }
-#endif
-
-    // cout << "\n" << endl;
-
     for(int i=0; i<3; i++)
     {
     cov1_pi[0][i] = 0;
@@ -973,10 +292,7 @@ void load_rich_mat_2016(string prich, string prich_err) // load RICH matrix for 
                                 *inv_rich_p[loop%2][(loop)/2][k][i]
                                 *inv_rich_p[loop%2][(loop)/2][m][i]
                                 *err_rich_p[j][k][l][m];
-#ifdef DEBUG
-                                cout << err_rich_p[j*3+k][l*3+m] << endl;
-                                cout << j*3+k << " " << l*3+m << endl;
-#endif
+
                 cov2[1][i] += inv_rich_m[loop%2][(loop)/2][i][j]
                                 *inv_rich_m[loop%2][(loop)/2][i][l]
                                 *inv_rich_m[loop%2][(loop)/2][k][i]
@@ -1039,60 +355,10 @@ void load_rich_mat_dummy(string prich, string prich_err) // Load identity matrix
 
   for(int i=0; i<10; i++)
   {
-    // cout << rich_mat_p[0][i][0][0] << " " << rich_mat_p[0][i][0][1] << " " << rich_mat_p[0][i][0][2] << endl;
-    // cout << rich_mat_p[0][i][1][0] << " " << rich_mat_p[0][i][1][1] << " " << rich_mat_p[0][i][1][2] << endl;
-    // cout << rich_mat_p[0][i][2][0] << " " << rich_mat_p[0][i][2][1] << " " << rich_mat_p[0][i][2][2] << endl;
-
-    // cout << endl;
-
-    // cout << rich_mat_p[1][i][0][0] << " " << rich_mat_p[1][i][0][1] << " " << rich_mat_p[1][i][0][2] << endl;
-    // cout << rich_mat_p[1][i][1][0] << " " << rich_mat_p[1][i][1][1] << " " << rich_mat_p[1][i][1][2] << endl;
-    // cout << rich_mat_p[1][i][2][0] << " " << rich_mat_p[1][i][2][1] << " " << rich_mat_p[1][i][2][2] << endl;
-
-    // cout << endl;
-
-    // cout << rich_mat_m[0][i][0][0] << " " << rich_mat_m[0][i][0][1] << " " << rich_mat_m[0][i][0][2] << endl;
-    // cout << rich_mat_m[0][i][1][0] << " " << rich_mat_m[0][i][1][1] << " " << rich_mat_m[0][i][1][2] << endl;
-    // cout << rich_mat_m[0][i][2][0] << " " << rich_mat_m[0][i][2][1] << " " << rich_mat_m[0][i][2][2] << endl;
-
-    // cout << endl;
-
-    // cout << rich_mat_m[1][i][0][0] << " " << rich_mat_m[1][i][0][1] << " " << rich_mat_m[1][i][0][2] << endl;
-    // cout << rich_mat_m[1][i][1][0] << " " << rich_mat_m[1][i][1][1] << " " << rich_mat_m[1][i][1][2] << endl;
-    // cout << rich_mat_m[1][i][2][0] << " " << rich_mat_m[1][i][2][1] << " " << rich_mat_m[1][i][2][2] << endl;
-
-    // cout << endl;
-
     inv_rich_p[0][i] = rich_mat_p[0][i].InvertFast();
     inv_rich_p[1][i] = rich_mat_p[1][i].InvertFast();
     inv_rich_m[0][i] = rich_mat_m[0][i].InvertFast();
     inv_rich_m[1][i] = rich_mat_m[1][i].InvertFast();
-
-    // cout << inv_rich_p[0][i][0][0] << " " << inv_rich_p[0][i][0][1] << " " << inv_rich_p[0][i][0][2] << endl;
-    // cout << inv_rich_p[0][i][1][0] << " " << inv_rich_p[0][i][1][1] << " " << inv_rich_p[0][i][1][2] << endl;
-    // cout << inv_rich_p[0][i][2][0] << " " << inv_rich_p[0][i][2][1] << " " << inv_rich_p[0][i][2][2] << endl;
-
-    // cout << endl;
-
-
-    // cout << inv_rich_p[1][i][0][0] << " " << inv_rich_p[1][i][0][1] << " " << inv_rich_p[1][i][0][2] << endl;
-    // cout << inv_rich_p[1][i][1][0] << " " << inv_rich_p[1][i][1][1] << " " << inv_rich_p[1][i][1][2] << endl;
-    // cout << inv_rich_p[1][i][2][0] << " " << inv_rich_p[1][i][2][1] << " " << inv_rich_p[1][i][2][2] << endl;
-
-    // cout << endl;
-
-
-    // cout << inv_rich_m[0][i][0][0] << " " << inv_rich_m[0][i][0][1] << " " << inv_rich_m[0][i][0][2] << endl;
-    // cout << inv_rich_m[0][i][1][0] << " " << inv_rich_m[0][i][1][1] << " " << inv_rich_m[0][i][1][2] << endl;
-    // cout << inv_rich_m[0][i][2][0] << " " << inv_rich_m[0][i][2][1] << " " << inv_rich_m[0][i][2][2] << endl;
-
-    // cout << endl;
-
-    // cout << inv_rich_m[1][i][0][0] << " " << inv_rich_m[1][i][0][1] << " " << inv_rich_m[1][i][0][2] << endl;
-    // cout << inv_rich_m[1][i][1][0] << " " << inv_rich_m[1][i][1][1] << " " << inv_rich_m[1][i][1][2] << endl;
-    // cout << inv_rich_m[1][i][2][0] << " " << inv_rich_m[1][i][2][1] << " " << inv_rich_m[1][i][2][2] << endl;
-
-    // cout << endl;
   }
 
   // Errors YODO
@@ -1103,8 +369,6 @@ void load_rich_mat_dummy(string prich, string prich_err) // Load identity matrix
     cerr << "\nERROR accessing RICH ERROR matrix \""<< prich_err <<"\": " << strerror(errno) << endl;
     abort();
   }
-
-
 
   for(int loop=0; loop<24; loop++)
   {
@@ -1199,19 +463,6 @@ void load_rich_mat_dummy(string prich, string prich_err) // Load identity matrix
       err_rich_m[0][2][2][2] = err_rich_m[2][2][0][2];
       err_rich_m[1][2][2][2] = err_rich_m[2][2][1][2];
 
-#ifdef DEBUG
-      for(int i=0; i<9; i++)
-      {
-        for(int j=0; j<9; j++)
-        {
-          cout << err_rich_p[i][j] << " ";
-        }
-        cout << endl;
-      }
-#endif
-
-      // cout << "\n" << endl;
-
       for(int i=0; i<3; i++)
       {
         cov1_pi[0][i] = 0;
@@ -1246,10 +497,7 @@ void load_rich_mat_dummy(string prich, string prich_err) // Load identity matrix
                                    *inv_rich_p[loop%2][(loop-4)/2][k][i]
                                    *inv_rich_p[loop%2][(loop-4)/2][m][i]
                                    *err_rich_p[j][k][l][m];
-#ifdef DEBUG
-                                  cout << err_rich_p[j*3+k][l*3+m] << endl;
-                                  cout << j*3+k << " " << l*3+m << endl;
-#endif
+
                     cov2[1][i] += inv_rich_m[loop%2][(loop-4)/2][i][j]
                                    *inv_rich_m[loop%2][(loop-4)/2][i][l]
                                    *inv_rich_m[loop%2][(loop-4)/2][k][i]
@@ -1733,11 +981,6 @@ int main(int argc, char **argv) // main function
     if (string(argv[i])=="-q") verbose = 0; // if option "-q" is passed, the program will be more "quiet"
   }
 
-  int year=0; 
-  if(Y2006) year=2006;
-  else if(Y2012) year=2012;
-  else if(Y2016) year=2016;
-
   //Kinematics
   Float_t Q2 = 0;
   Float_t xBj = 0;
@@ -1750,22 +993,12 @@ int main(int argc, char **argv) // main function
 
   if(RICH) // if RICH flag is set to 1, load the RICH matrix
   {
-    if(Y2006 || Y2012) load_rich_mat_2006(mat_RICH_2006_name, err_RICH_name);
-    if(Y2016) load_rich_mat_2016(mat_RICH_2016_name, err_RICH_name);
+    load_rich_mat_2016(mat_RICH_2016_name, err_RICH_name);
   }
   else // else, load the identity matrix
   {
     load_rich_mat_dummy(mat_RICH_2016_name, err_RICH_name);
   }
-
-  // Target cells : useless for 2016 data
-  if(Y2012) InitTargetFile(target_file_2012);
-  else if(Y2016) InitTargetFile(target_file_2016);
-
-  // Radiative and electron corrections : useless a priori
-  LoadInclusiveRadiativeCorrection();
-  LoadSemiInclusiveRadiativeCorrection();
-  LoadElectronCorrection();
 
   ofstream count("count.txt", std::ofstream::out | std::ofstream::trunc); // create a file count.txt which seems to be of no use in the rest of the analysis...
 
@@ -1941,7 +1174,7 @@ int main(int argc, char **argv) // main function
         E_mu_prim->GetEntry(ip); // energy of scattered muon
         Charge->GetEntry(ip); // charge of scattered muon
         XX0->GetEntry(ip);
-        HM04x->GetEntry(ip); // coordinates of the reconstructed track of the scattered muon in the diffrent hodoscopes
+        HM04x->GetEntry(ip); // coordinates of the reconstructed track of the scattered muon in the different hodoscopes
         HM04y->GetEntry(ip);
         HM05x->GetEntry(ip);
         HM05y->GetEntry(ip);
@@ -1960,9 +1193,9 @@ int main(int argc, char **argv) // main function
         BMS->GetEntry(ip);
 
         //Hadrons : get the values of the different variables related to hadrons
-        p->GetEntry(ip);
+        p->GetEntry(ip); // Hadron momentum
         th->GetEntry(ip);
-        pt->GetEntry(ip);
+        pt->GetEntry(ip); // Hadron transverse momentum
         ph->GetEntry(ip);
         hXX0->GetEntry(ip);
         inHCALacc->GetEntry(ip);
@@ -1994,13 +1227,10 @@ int main(int argc, char **argv) // main function
         Float_t zlab = z->GetLeaf("z")->GetValue();
         zlabbin=-1;
 
-        if(Y2016)
-        {
-          if(-325<=zlab && zlab<-261.5) zlabbin = 0; // Depending on the value of the z coordinate of the interaction vertex, put it in one of the 4 bins
-          else if(-261.5<=zlab && zlab<-198) zlabbin = 1;
-          else if(-198<=zlab && zlab<-134.5) zlabbin = 2;
-          else if(-134.5<=zlab && zlab<=-71) zlabbin = 3;
-        }
+        if(-325<=zlab && zlab<-261.5) zlabbin = 0; // Depending on the value of the z coordinate of the interaction vertex, put it in one of the 4 bins
+        else if(-261.5<=zlab && zlab<-198) zlabbin = 1;
+        else if(-198<=zlab && zlab<-134.5) zlabbin = 2;
+        else if(-134.5<=zlab && zlab<=-71) zlabbin = 3;
 
         //--------------------------------------------------------------------------
         //--------- Kinematics -----------------------------------------------------
@@ -2034,62 +1264,6 @@ int main(int argc, char **argv) // main function
           wBj = 0;
 
         int trig= trigMask->GetLeaf("trigMask")->GetValue();
-
-
-        //2006 ---
-
-        if(Y2006)
-        {
-          if ((trig&256) && HM05x->GetLeaf("HM05x")->GetValue()<(HM05y->GetLeaf("HM05y")->GetValue()>0 ? 14.55-0.15 : 22.02864-0.12864) )
-          {
-            trig -= 256;
-          }
-        }
-
-        //--------------------------------------------------------------------------
-        //--------- Target ---------------------------------------------------------
-        //--------------------------------------------------------------------------
-
-        //MC target position new
-        static const Float_t dz = 2;
-
-        static const Float_t mcxU = -0.085;
-        static const Float_t mcyU = 0.33;
-        static const Float_t mczU_1 = -65+dz+4;
-        //static const float mczU_2 = -35+dz;
-        //static const float mczC_1 = -30+dz+8;
-        //static const float mczC_2 = 30+dz;
-        static const Float_t mcxD = -0.085;
-        static const Float_t mcyD = 0.33;
-        //static const float mczD_1 = 35+dz+2;
-        static const Float_t mczD_2 = 65+dz;
-
-        float mcR    = 1.4;
-        //float mcyCUT = 1.4;
-
-        //target position data 2006
-        static const Float_t xU = -0.1;
-        static const Float_t yU = 0.33;
-        static const Float_t zU_1 = -65+dz+4;
-        //static const float zU_2 = -35+dz;
-        //static const float zC_1 = -30+dz+8;
-        //static const float zC_2 =  30+dz;
-        static const Float_t xD = -0.07;
-        static const Float_t yD = 0.33;
-        //static const float zD_1 =  35+dz+2;
-        static const Float_t zD_2 =  65+dz;
-
-        Float_t R    = 1.4;//1.4;
-        Float_t yCUT = 1.4;
-
-        Float_t mcxC = (mcxD-mcxU) * (mczU_1-z->GetLeaf("z")->GetValue()) / (mczU_1-mczD_2) + mcxU;
-        Float_t mcyC = (mcyD-mcyU) * (mczU_1-z->GetLeaf("z")->GetValue()) / (mczU_1-mczD_2) + mcyU;
-        Float_t mcr = sqrt( (x->GetLeaf("x")->GetValue()-mcxC)*(x->GetLeaf("x")->GetValue()-mcxC)
-                      + (y->GetLeaf("y")->GetValue()-mcyC)*(y->GetLeaf("y")->GetValue()-mcyC) );
-        Float_t xC = (xD-xU) * (zU_1-z->GetLeaf("z")->GetValue()) / (zU_1-zD_2) + xU;
-        Float_t yC = (yD-yU) * (zU_1-z->GetLeaf("z")->GetValue()) / (zU_1-zD_2) + yU;
-        Float_t r = sqrt( (x->GetLeaf("x")->GetValue()-xC)*(x->GetLeaf("x")->GetValue()-xC)
-                      + (y->GetLeaf("y")->GetValue()-yC)*(y->GetLeaf("y")->GetValue()-yC) );
 
         // -------------------------------------------------------------------------
         // --------- DIS Selection -------------------------------------------------
@@ -2129,34 +1303,8 @@ int main(int argc, char **argv) // main function
           if(-325<z->GetLeaf("z")->GetValue() && z->GetLeaf("z")->GetValue()<-71) fZvtx[1]->Fill(z->GetLeaf("z")->GetValue());
         }
 
-        //2006 ---
-        if(Y2006)
-        {
-        // Z coordinate within target regions
-        if(!((-56<z->GetLeaf("z")->GetValue() && z->GetLeaf("z")->GetValue()<-35)
-              ||(-20<z->GetLeaf("z")->GetValue() && z->GetLeaf("z")->GetValue()<31)
-              ||(43<z->GetLeaf("z")->GetValue() && z->GetLeaf("z")->GetValue()<66))) continue;
-        if(!(mcr < mcR &&  (y->GetLeaf("y")->GetValue()-mcyC)<yCUT
-             && r < R
-             &&  (y->GetLeaf("y")->GetValue()-yC)<yCUT
-             && ((z->GetLeaf("z")->GetValue()>(-65+2+7) && z->GetLeaf("z")->GetValue()<(-35+2-2))
-                  ||(z->GetLeaf("z")->GetValue() > (-30+2+8) && z->GetLeaf("z")->GetValue() < (30+2-1))
-                  ||(z->GetLeaf("z")->GetValue() > (35+2+6) && z->GetLeaf("z")->GetValue() < (65+2-1))))) continue;
-        }
-        //2006 ---
-        //2012 ---
-        else if(Y2012)
-        {
-          if(!InTarget(x->GetLeaf("x")->GetValue(),y->GetLeaf("y")->GetValue(),z->GetLeaf("z")->GetValue())) continue;
-        }
-        //2012 ---
-        //2016 ---
-        else if(Y2016)
-        {
-          if(!inTarget->GetLeaf("inTarget")->GetValue()) continue; // if the interaction vertex is outside target, go on to the next event
-          if(!(-325<z->GetLeaf("z")->GetValue() && z->GetLeaf("z")->GetValue()<-71)) continue;
-        }
-        //2016 ---
+        if(!inTarget->GetLeaf("inTarget")->GetValue()) continue; // if the interaction vertex is outside target, go on to the next event
+        if(!(-325<z->GetLeaf("z")->GetValue() && z->GetLeaf("z")->GetValue()<-71)) continue;
         fTarg++;
 
         if(kin_flag)
@@ -2201,24 +1349,7 @@ int main(int argc, char **argv) // main function
         fMZfirst++;
 
         // IM/O triggers
-        //2006 ---
-        if(Y2006)
-        {
-          if(!(trig&8 || trig&256)) continue;
-        }
-        //2006 ---
-        //2012 ---
-        else if(Y2012)
-        {
-          if(!(trig&2 || trig&4 || trig&8)) continue;
-        }
-        //2012 ---
-        //2016 ---
-        else if(Y2016)
-        {
-          if(!(trig&2 || trig&4 || trig&8 || trig&512)) continue;
-        }
-        //2016 ---
+        if(!(trig&2 || trig&4 || trig&8 || trig&512)) continue;
         fTrig++;
 
         if(kin_flag) fQ2k[0]->Fill(Q2);
@@ -2349,19 +1480,19 @@ int main(int argc, char **argv) // main function
 
         for(int i=0; i<12; i++)
         {
-          fNDIS_evt[0][fMuCharge][xbin][ybin][i] += 1*GetInclusiveRadiativeCorrection(xBj,yBj);
-          fNDIS_evt[1][fMuCharge][xbin][ybin][i] += 1*GetInclusiveRadiativeCorrection(xBj,yBj);
-          fNDIS_evt[2][fMuCharge][xbin][ybin][i] += 1*GetInclusiveRadiativeCorrection(xBj,yBj);
-          fNDIS_evt_zvtx[0][fMuCharge][xbin][ybin][i][zlabbin] += 1*GetInclusiveRadiativeCorrection(xBj,yBj);
-          fNDIS_evt_zvtx[1][fMuCharge][xbin][ybin][i][zlabbin] += 1*GetInclusiveRadiativeCorrection(xBj,yBj);
-          fNDIS_evt_zvtx[2][fMuCharge][xbin][ybin][i][zlabbin] += 1*GetInclusiveRadiativeCorrection(xBj,yBj);
+          fNDIS_evt[0][fMuCharge][xbin][ybin][i] += 1;
+          fNDIS_evt[1][fMuCharge][xbin][ybin][i] += 1;
+          fNDIS_evt[2][fMuCharge][xbin][ybin][i] += 1;
+          fNDIS_evt_zvtx[0][fMuCharge][xbin][ybin][i][zlabbin] += 1;
+          fNDIS_evt_zvtx[1][fMuCharge][xbin][ybin][i][zlabbin] += 1;
+          fNDIS_evt_zvtx[2][fMuCharge][xbin][ybin][i][zlabbin] += 1;
 
-          fNDIS_evt_err[0][fMuCharge][xbin][ybin][i] += pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
-          fNDIS_evt_err[1][fMuCharge][xbin][ybin][i] += pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
-          fNDIS_evt_err[2][fMuCharge][xbin][ybin][i] += pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
-          fNDIS_evt_err_zvtx[0][fMuCharge][xbin][ybin][i][zlabbin] += pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
-          fNDIS_evt_err_zvtx[1][fMuCharge][xbin][ybin][i][zlabbin] += pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
-          fNDIS_evt_err_zvtx[2][fMuCharge][xbin][ybin][i][zlabbin] += pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
+          fNDIS_evt_err[0][fMuCharge][xbin][ybin][i] += 1;
+          fNDIS_evt_err[1][fMuCharge][xbin][ybin][i] += 1;
+          fNDIS_evt_err[2][fMuCharge][xbin][ybin][i] += 1;
+          fNDIS_evt_err_zvtx[0][fMuCharge][xbin][ybin][i][zlabbin] += 1;
+          fNDIS_evt_err_zvtx[1][fMuCharge][xbin][ybin][i][zlabbin] += 1;
+          fNDIS_evt_err_zvtx[2][fMuCharge][xbin][ybin][i][zlabbin] += 1;
 
           fFlag[0][xbin][ybin][i]=0;
           fFlag[1][xbin][ybin][i]=0;
@@ -2371,26 +1502,26 @@ int main(int argc, char **argv) // main function
           if(!(fNu_min[0][i]<nu && nu<fNu_max[0][i]))
           {
             fFlag[0][xbin][ybin][i]=1;
-            fNDIS_evt[0][fMuCharge][xbin][ybin][i] -= GetInclusiveRadiativeCorrection(xBj,yBj);
-            fNDIS_evt_zvtx[0][fMuCharge][xbin][ybin][i][zlabbin] -= GetInclusiveRadiativeCorrection(xBj,yBj);
-            fNDIS_evt_err[0][fMuCharge][xbin][ybin][i] -= pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
-            fNDIS_evt_err_zvtx[0][fMuCharge][xbin][ybin][i][zlabbin] -= pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
+            fNDIS_evt[0][fMuCharge][xbin][ybin][i] -= 1;
+            fNDIS_evt_zvtx[0][fMuCharge][xbin][ybin][i][zlabbin] -= 1;
+            fNDIS_evt_err[0][fMuCharge][xbin][ybin][i] -= 1;
+            fNDIS_evt_err_zvtx[0][fMuCharge][xbin][ybin][i][zlabbin] -= 1;
           }
           if(!(fNu_min[1][i]<nu && nu<fNu_max[1][i]))
           {
             fFlag[1][xbin][ybin][i]=1;
-            fNDIS_evt[1][fMuCharge][xbin][ybin][i] -= GetInclusiveRadiativeCorrection(xBj,yBj);
-            fNDIS_evt_zvtx[1][fMuCharge][xbin][ybin][i][zlabbin] -= GetInclusiveRadiativeCorrection(xBj,yBj);
-            fNDIS_evt_err[1][fMuCharge][xbin][ybin][i] -= pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
-            fNDIS_evt_err_zvtx[1][fMuCharge][xbin][ybin][i][zlabbin] -= pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
+            fNDIS_evt[1][fMuCharge][xbin][ybin][i] -= 1;
+            fNDIS_evt_zvtx[1][fMuCharge][xbin][ybin][i][zlabbin] -= 1;
+            fNDIS_evt_err[1][fMuCharge][xbin][ybin][i] -= 1;
+            fNDIS_evt_err_zvtx[1][fMuCharge][xbin][ybin][i][zlabbin] -= 1;
           }
           if(!(fNu_min[2][i]<nu && nu<fNu_max[2][i]))
           {
             fFlag[2][xbin][ybin][i]=1;
-            fNDIS_evt[2][fMuCharge][xbin][ybin][i] -= GetInclusiveRadiativeCorrection(xBj,yBj);
-            fNDIS_evt_zvtx[2][fMuCharge][xbin][ybin][i][zlabbin] -= GetInclusiveRadiativeCorrection(xBj,yBj);
-            fNDIS_evt_err[2][fMuCharge][xbin][ybin][i] -= pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
-            fNDIS_evt_err_zvtx[2][fMuCharge][xbin][ybin][i][zlabbin] -= pow(GetInclusiveRadiativeCorrection(xBj,yBj),2);
+            fNDIS_evt[2][fMuCharge][xbin][ybin][i] -= 1;
+            fNDIS_evt_zvtx[2][fMuCharge][xbin][ybin][i][zlabbin] -= 1;
+            fNDIS_evt_err[2][fMuCharge][xbin][ybin][i] -= 1;
+            fNDIS_evt_err_zvtx[2][fMuCharge][xbin][ybin][i][zlabbin] -= 1;
           }
         }
 
@@ -2451,16 +1582,6 @@ int main(int argc, char **argv) // main function
 
           set<Float_t>::iterator it = fLHsec_set.begin();
           advance(it, fLHsec_set.size()-2);
-  #ifdef DEBUG
-          if(*it != fLHsec) {cout << i << " : "
-          <<  LH->GetLeaf("Hadrons.LH")->GetValue(0+6*i)  << " "
-          << LH->GetLeaf("Hadrons.LH")->GetValue(1+6*i)  << " "
-          << LH->GetLeaf("Hadrons.LH")->GetValue(2+6*i)  << " "
-          << LH->GetLeaf("Hadrons.LH")->GetValue(3+6*i)  << " "
-          << LH->GetLeaf("Hadrons.LH")->GetValue(4+6*i)  << " "
-          << LH->GetLeaf("Hadrons.LH")->GetValue(5+6*i)  << " "
-          << endl; cout << *it << " " << fLHsec << endl;}
-  #endif
 
           //**********************************************************************
 
@@ -2780,8 +1901,6 @@ int main(int argc, char **argv) // main function
             // Severe cuts ---
           }
 
-
-
           //**********************************************************************
 
           // z calculation
@@ -2884,21 +2003,6 @@ int main(int argc, char **argv) // main function
           if(!(0.2<zBj && zBj<0.85)) continue;
           fZtest++;
 
-          // int dz = abs(z->GetLeaf("z")->GetValue()-70);
-          // int ydy = y->GetLeaf("y")->GetValue()+dz*tan(th->GetLeaf("Hadrons.th")->GetValue(i))*sin(ph->GetLeaf("Hadrons.ph")->GetValue(i));
-          // int xdx = x->GetLeaf("x")->GetValue()+dz*tan(th->GetLeaf("Hadrons.th")->GetValue(i))*cos(ph->GetLeaf("Hadrons.ph")->GetValue(i));
-          // if(!( ( -35 < xdx && xdx < 35 ) && ( -25 < ydy && ydy < 25 ) )) continue;
-
-          // test << xBj << " " << Q2 << " " << yBj << " " << p->GetLeaf("Hadrons.P")->GetValue(i) << " "
-          //      << thRICH->GetLeaf("Hadrons.thRICH")->GetValue(i) << " " << zBj << " " << fId << " "
-          //      << LH->GetLeaf("Hadrons.LH")->GetValue(0+6*i) << " "
-          //      << LH->GetLeaf("Hadrons.LH")->GetValue(1+6*i) << " "
-          //      << LH->GetLeaf("Hadrons.LH")->GetValue(2+6*i) << " "
-          //      << LH->GetLeaf("Hadrons.LH")->GetValue(3+6*i) << " "
-          //      << LH->GetLeaf("Hadrons.LH")->GetValue(4+6*i) << " "
-          //      << LH->GetLeaf("Hadrons.LH")->GetValue(5+6*i) << " " << endl;
-
-
           if(kin_flag)
           {
             fKinematics[3]->Fill(zBj);
@@ -2943,13 +2047,6 @@ int main(int argc, char **argv) // main function
               fPiplus_err += pow(res_vect_err[0],2);
               fKplus_err += pow(res_vect_err[1],2);
               fPplus_err += pow(res_vect_err[2],2);
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[1] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[2] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
 
               pzcontainer.vec[1][0].push_back(zBj);
               pzcontainer.vec[1][1].push_back(res_vect[0][0]);
@@ -2967,9 +2064,6 @@ int main(int argc, char **argv) // main function
               pzcontainer_err.vec[1][4].push_back(pow(hadron_nb,2));
 
               hadcontainer.vec.push_back(0);
-  #ifdef DEBUG
-              cout << res_vect[0][0] << " " << res_vect[1][0] << " " << res_vect[2][0] << endl;
-  #endif
             }
           }
           else if(fId==1)
@@ -2984,13 +2078,6 @@ int main(int argc, char **argv) // main function
               fPiminus_err += pow(res_vect_err[0],2);
               fKminus_err += pow(res_vect_err[1],2);
               fPminus_err += pow(res_vect_err[2],2);
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[1] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[2] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
 
               pzcontainer.vec[0][0].push_back(zBj);
               pzcontainer.vec[0][1].push_back(res_vect[0][0]);
@@ -3008,9 +2095,6 @@ int main(int argc, char **argv) // main function
               pzcontainer_err.vec[0][4].push_back(pow(hadron_nb,2));
 
               hadcontainer.vec.push_back(1);
-  #ifdef DEBUG
-              cout << res_vect[0][0] << " " << res_vect[1][0] << " " << res_vect[2][0] << endl;
-  #endif
             }
           }
           else if(fId==2)
@@ -3018,8 +2102,8 @@ int main(int argc, char **argv) // main function
             if(!fFlag[0][xbin][ybin][zbin])
             {
               fHplus++;
-              pzcontainer.vec[1][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
-              pzcontainer_err.vec[1][4].push_back(pow(GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj),2));
+              pzcontainer.vec[1][4].push_back(1);
+              pzcontainer_err.vec[1][4].push_back(1);
               thlocal.push_back(th->GetLeaf("Hadrons.th")->GetValue(i));
               ptlocal.push_back(pow(pt->GetLeaf("Hadrons.pt")->GetValue(i),2));
               hadron_flag = 1;
@@ -3034,13 +2118,6 @@ int main(int argc, char **argv) // main function
               fPiplus_err += pow(res_vect_err[0],2);
               fKplus_err += pow(res_vect_err[1],2);
               fPplus_err += pow(res_vect_err[2],2);
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[1] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[2] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
 
               pzcontainer.vec[1][0].push_back(zBj);
               pzcontainer.vec[1][1].push_back(res_vect[0][0]);
@@ -3061,9 +2138,6 @@ int main(int argc, char **argv) // main function
               }
 
               hadcontainer.vec.push_back(2);
-  #ifdef DEBUG
-              cout << res_vect[0][0] << " " << res_vect[1][0] << " " << res_vect[2][0] << endl;
-  #endif
             }
           }
           else if(fId==3)
@@ -3071,8 +2145,8 @@ int main(int argc, char **argv) // main function
             if(!fFlag[0][xbin][ybin][zbin])
             {
               fHminus++;
-              pzcontainer.vec[0][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
-              pzcontainer_err.vec[0][4].push_back(pow(GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj),2));
+              pzcontainer.vec[0][4].push_back(1);
+              pzcontainer_err.vec[0][4].push_back(1);
               thlocal.push_back(th->GetLeaf("Hadrons.th")->GetValue(i));
               ptlocal.push_back(pow(pt->GetLeaf("Hadrons.pt")->GetValue(i),2));
               hadron_flag = 1;
@@ -3087,13 +2161,6 @@ int main(int argc, char **argv) // main function
               fPiminus_err += pow(res_vect_err[0],2);
               fKminus_err += pow(res_vect_err[1],2);
               fPminus_err += pow(res_vect_err[2],2);
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[1] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[2] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
 
               pzcontainer.vec[0][0].push_back(zBj);
               pzcontainer.vec[0][1].push_back(res_vect[0][0]);
@@ -3114,9 +2181,6 @@ int main(int argc, char **argv) // main function
               }
 
               hadcontainer.vec.push_back(3);
-  #ifdef DEBUG
-              cout << res_vect[0][0] << " " << res_vect[1][0] << " " << res_vect[2][0] << endl;
-  #endif
             }
           }
           else if(fId==4)
@@ -3124,8 +2188,8 @@ int main(int argc, char **argv) // main function
             if(!fFlag[0][xbin][ybin][zbin])
             {
               fHplus++;
-              pzcontainer.vec[1][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
-              pzcontainer_err.vec[1][4].push_back(pow(GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj),2));
+              pzcontainer.vec[1][4].push_back(1);
+              pzcontainer_err.vec[1][4].push_back(1);
               thlocal.push_back(th->GetLeaf("Hadrons.th")->GetValue(i));
               ptlocal.push_back(pow(pt->GetLeaf("Hadrons.pt")->GetValue(i),2));
               hadron_flag = 1;
@@ -3140,13 +2204,6 @@ int main(int argc, char **argv) // main function
               fPiplus_err += pow(res_vect_err[0],2);
               fKplus_err += pow(res_vect_err[1],2);
               fPplus_err += pow(res_vect_err[2],2);
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[1] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[2] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
 
               pzcontainer.vec[1][0].push_back(zBj);
               pzcontainer.vec[1][1].push_back(res_vect[0][0]);
@@ -3167,9 +2224,6 @@ int main(int argc, char **argv) // main function
               }
 
               hadcontainer.vec.push_back(0);
-  #ifdef DEBUG
-              cout << res_vect[0][0] << " " << res_vect[1][0] << " " << res_vect[2][0] << endl;
-  #endif
             }
           }
           else if(fId==5)
@@ -3177,8 +2231,8 @@ int main(int argc, char **argv) // main function
             if(!fFlag[0][xbin][ybin][zbin])
             {
               fHminus++;
-              pzcontainer.vec[0][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
-              pzcontainer_err.vec[0][4].push_back(pow(GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj),2));
+              pzcontainer.vec[0][4].push_back(1);
+              pzcontainer_err.vec[0][4].push_back(1);
               thlocal.push_back(th->GetLeaf("Hadrons.th")->GetValue(i));
               ptlocal.push_back(pow(pt->GetLeaf("Hadrons.pt")->GetValue(i),2));
               hadron_flag = 1;
@@ -3193,13 +2247,6 @@ int main(int argc, char **argv) // main function
               fPiminus_err += pow(res_vect_err[0],2);
               fKminus_err += pow(res_vect_err[1],2);
               fPminus_err += pow(res_vect_err[2],2);
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[1] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect_err[2] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
 
               pzcontainer.vec[0][0].push_back(zBj);
               pzcontainer.vec[0][1].push_back(res_vect[0][0]);
@@ -3220,9 +2267,6 @@ int main(int argc, char **argv) // main function
               }
 
               hadcontainer.vec.push_back(5);
-  #ifdef DEBUG
-              cout << res_vect[0][0] << " " << res_vect[1][0] << " " << res_vect[2][0] << endl;
-  #endif
             }
           }
           else if(fId==6)
@@ -3234,8 +2278,8 @@ int main(int argc, char **argv) // main function
               pzcontainer.vec[1][1].push_back(0); pzcontainer_err.vec[1][1].push_back(0);
               pzcontainer.vec[1][2].push_back(0); pzcontainer_err.vec[1][2].push_back(0);
               pzcontainer.vec[1][3].push_back(0); pzcontainer_err.vec[1][3].push_back(0);
-              pzcontainer.vec[1][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
-              pzcontainer_err.vec[1][4].push_back(pow(GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj),2));
+              pzcontainer.vec[1][4].push_back(1);
+              pzcontainer_err.vec[1][4].push_back(1);
               thlocal.push_back(th->GetLeaf("Hadrons.th")->GetValue(i));
               ptlocal.push_back(pow(pt->GetLeaf("Hadrons.pt")->GetValue(i),2));
               hadcontainer.vec.push_back(6);
@@ -3250,18 +2294,13 @@ int main(int argc, char **argv) // main function
               pzcontainer.vec[0][1].push_back(0); pzcontainer_err.vec[0][1].push_back(0);
               pzcontainer.vec[0][2].push_back(0); pzcontainer_err.vec[0][2].push_back(0);
               pzcontainer.vec[0][3].push_back(0); pzcontainer_err.vec[0][3].push_back(0);
-              pzcontainer.vec[0][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
-              pzcontainer_err.vec[0][4].push_back(pow(GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj),2));
+              pzcontainer.vec[0][4].push_back(1);
+              pzcontainer_err.vec[0][4].push_back(1);
               thlocal.push_back(th->GetLeaf("Hadrons.th")->GetValue(i));
               ptlocal.push_back(pow(pt->GetLeaf("Hadrons.pt")->GetValue(i),2));
               hadcontainer.vec.push_back(7);
             }
           }
-          else
-          {
-
-          }
-
 
           //**********************************************************************
 
@@ -3275,10 +2314,6 @@ int main(int argc, char **argv) // main function
             {
               res_vect = inv_rich_p[theta_bin][mom_bin]*pi_vect;
               hadron_nb = 1;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_loose.vec[1][0].push_back(zBj);
               pzcontainer_loose.vec[1][1].push_back(res_vect[0][0]);
               pzcontainer_loose.vec[1][2].push_back(res_vect[1][0]);
@@ -3292,10 +2327,6 @@ int main(int argc, char **argv) // main function
             {
               res_vect = inv_rich_m[theta_bin][mom_bin]*pi_vect;
               hadron_nb = 1;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_loose.vec[0][0].push_back(zBj);
               pzcontainer_loose.vec[0][1].push_back(res_vect[0][0]);
               pzcontainer_loose.vec[0][2].push_back(res_vect[1][0]);
@@ -3307,15 +2338,12 @@ int main(int argc, char **argv) // main function
           {
             if(!fFlag[0][xbin][ybin][zbin])
             {
-              pzcontainer_loose.vec[1][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
+              pzcontainer_loose.vec[1][4].push_back(1);
               hadron_flag = 1;
             }
             if(!fFlag[1][xbin][ybin][zbin])
             {
               res_vect = inv_rich_p[theta_bin][mom_bin]*k_vect;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_loose.vec[1][0].push_back(zBj);
               pzcontainer_loose.vec[1][1].push_back(res_vect[0][0]);
               pzcontainer_loose.vec[1][2].push_back(res_vect[1][0]);
@@ -3327,15 +2355,12 @@ int main(int argc, char **argv) // main function
           {
             if(!fFlag[0][xbin][ybin][zbin])
             {
-              pzcontainer_loose.vec[0][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
+              pzcontainer_loose.vec[0][4].push_back(1);
               hadron_flag = 1;
             }
             if(!fFlag[1][xbin][ybin][zbin])
             {
               res_vect = inv_rich_m[theta_bin][mom_bin]*k_vect;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_loose.vec[0][0].push_back(zBj);
               pzcontainer_loose.vec[0][1].push_back(res_vect[0][0]);
               pzcontainer_loose.vec[0][2].push_back(res_vect[1][0]);
@@ -3347,15 +2372,12 @@ int main(int argc, char **argv) // main function
           {
             if(!fFlag[0][xbin][ybin][zbin])
             {
-              pzcontainer_loose.vec[1][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
+              pzcontainer_loose.vec[1][4].push_back(1);
               hadron_flag = 1;
             }
             if(!fFlag[2][xbin][ybin][zbin])
             {
               res_vect = inv_rich_p[theta_bin][mom_bin]*p_vect;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_loose.vec[1][0].push_back(zBj);
               pzcontainer_loose.vec[1][1].push_back(res_vect[0][0]);
               pzcontainer_loose.vec[1][2].push_back(res_vect[1][0]);
@@ -3367,15 +2389,12 @@ int main(int argc, char **argv) // main function
           {
             if(!fFlag[0][xbin][ybin][zbin])
             {
-              pzcontainer_loose.vec[0][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
+              pzcontainer_loose.vec[0][4].push_back(1);
               hadron_flag = 1;
             }
             if(!fFlag[2][xbin][ybin][zbin])
             {
               res_vect = inv_rich_m[theta_bin][mom_bin]*p_vect;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_loose.vec[0][0].push_back(zBj);
               pzcontainer_loose.vec[0][1].push_back(res_vect[0][0]);
               pzcontainer_loose.vec[0][2].push_back(res_vect[1][0]);
@@ -3392,7 +2411,6 @@ int main(int argc, char **argv) // main function
               pzcontainer_loose.vec[1][2].push_back(0);
               pzcontainer_loose.vec[1][3].push_back(0);
               hadron_nb = 1;
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_loose.vec[1][4].push_back(hadron_nb);
             }
           }
@@ -3405,15 +2423,9 @@ int main(int argc, char **argv) // main function
               pzcontainer_loose.vec[0][2].push_back(0);
               pzcontainer_loose.vec[0][3].push_back(0);
               hadron_nb = 1;
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_loose.vec[0][4].push_back(hadron_nb);
             }
           }
-          else
-          {
-
-          }
-
 
           // Severe cut
 
@@ -3425,10 +2437,6 @@ int main(int argc, char **argv) // main function
             {
               res_vect = inv_rich_p[theta_bin][mom_bin]*pi_vect;
               hadron_nb = 1;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_severe.vec[1][0].push_back(zBj);
               pzcontainer_severe.vec[1][1].push_back(res_vect[0][0]);
               pzcontainer_severe.vec[1][2].push_back(res_vect[1][0]);
@@ -3442,10 +2450,6 @@ int main(int argc, char **argv) // main function
             {
               res_vect = inv_rich_m[theta_bin][mom_bin]*pi_vect;
               hadron_nb = 1;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_severe.vec[0][0].push_back(zBj);
               pzcontainer_severe.vec[0][1].push_back(res_vect[0][0]);
               pzcontainer_severe.vec[0][2].push_back(res_vect[1][0]);
@@ -3457,15 +2461,12 @@ int main(int argc, char **argv) // main function
           {
             if(!fFlag[0][xbin][ybin][zbin])
             {
-              pzcontainer_severe.vec[1][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
+              pzcontainer_severe.vec[1][4].push_back(1);
               hadron_flag = 1;
             }
             if(!fFlag[1][xbin][ybin][zbin])
             {
               res_vect = inv_rich_p[theta_bin][mom_bin]*k_vect;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_severe.vec[1][0].push_back(zBj);
               pzcontainer_severe.vec[1][1].push_back(res_vect[0][0]);
               pzcontainer_severe.vec[1][2].push_back(res_vect[1][0]);
@@ -3477,15 +2478,12 @@ int main(int argc, char **argv) // main function
           {
             if(!fFlag[0][xbin][ybin][zbin])
             {
-              pzcontainer_severe.vec[0][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
+              pzcontainer_severe.vec[0][4].push_back(1);
               hadron_flag = 1;
             }
             if(!fFlag[1][xbin][ybin][zbin])
             {
               res_vect = inv_rich_m[theta_bin][mom_bin]*k_vect;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_severe.vec[0][0].push_back(zBj);
               pzcontainer_severe.vec[0][1].push_back(res_vect[0][0]);
               pzcontainer_severe.vec[0][2].push_back(res_vect[1][0]);
@@ -3497,15 +2495,12 @@ int main(int argc, char **argv) // main function
           {
             if(!fFlag[0][xbin][ybin][zbin])
             {
-              pzcontainer_severe.vec[1][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
+              pzcontainer_severe.vec[1][4].push_back(1);
               hadron_flag = 1;
             }
             if(!fFlag[2][xbin][ybin][zbin])
             {
               res_vect = inv_rich_p[theta_bin][mom_bin]*p_vect;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_severe.vec[1][0].push_back(zBj);
               pzcontainer_severe.vec[1][1].push_back(res_vect[0][0]);
               pzcontainer_severe.vec[1][2].push_back(res_vect[1][0]);
@@ -3517,15 +2512,12 @@ int main(int argc, char **argv) // main function
           {
             if(!fFlag[0][xbin][ybin][zbin])
             {
-              pzcontainer_severe.vec[0][4].push_back(1*GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj));
+              pzcontainer_severe.vec[0][4].push_back(1);
               hadron_flag = 1;
             }
             if(!fFlag[2][xbin][ybin][zbin])
             {
               res_vect = inv_rich_m[theta_bin][mom_bin]*p_vect;
-              res_vect[0][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[1][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
-              res_vect[2][0] *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_severe.vec[0][0].push_back(zBj);
               pzcontainer_severe.vec[0][1].push_back(res_vect[0][0]);
               pzcontainer_severe.vec[0][2].push_back(res_vect[1][0]);
@@ -3542,7 +2534,6 @@ int main(int argc, char **argv) // main function
               pzcontainer_severe.vec[1][2].push_back(0);
               pzcontainer_severe.vec[1][3].push_back(0);
               hadron_nb = 1;
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_severe.vec[1][4].push_back(hadron_nb);
             }
           }
@@ -3555,13 +2546,8 @@ int main(int argc, char **argv) // main function
               pzcontainer_severe.vec[0][2].push_back(0);
               pzcontainer_severe.vec[0][3].push_back(0);
               hadron_nb = 1;
-              hadron_nb *= GetSemiInclusiveRadiativeCorrection(xBj,yBj,zBj);
               pzcontainer_severe.vec[0][4].push_back(hadron_nb);
             }
-          }
-          else
-          {
-
           }
         }
 
@@ -3596,7 +2582,6 @@ int main(int argc, char **argv) // main function
         YBjsevere.push_back(yBj);
 
       }
-      cout << "\n" << endl;
 
       // Loose cut
 
@@ -3823,6 +2808,8 @@ int main(int argc, char **argv) // main function
         }
       }
     }
+    
+    int year = 2016;
 
     ofstream ofs_h(Form("rawmult/%d/hadron_%s.txt",year,periodName.c_str()), std::ofstream::out | std::ofstream::trunc);
     ofstream ofs_hzvtx(Form("rawmult/%d/hadron_zvtx_%s.txt",year,periodName.c_str()), std::ofstream::out | std::ofstream::trunc);
@@ -3954,15 +2941,6 @@ int main(int argc, char **argv) // main function
       fKinematics2D[0]->Fill(fXBjkin[i],fYBjkin[i]);
       fKinematics2D[1]->Fill(fXBjkin[i],fQ2kin[i]);
       fTarget2D->Fill(fX[i],fY[i]);
-      /* fHO03->Fill(fHO03x[i],fHO03y[i]);
-      fHO04->Fill(fHO04x[i],fHO04y[i]);
-      fHM04->Fill(fHM04x[i],fHM04y[i]);
-      fHM05->Fill(fHM05x[i],fHM05y[i]);
-      fHL04->Fill(fHL04x[i],fHL04y[i]);
-      fHL05->Fill(fHL05x[i],fHL05y[i]);
-      fHG01->Fill(fHG01x[i],fHG01y[i]);
-      fHG021->Fill(fHG021x[i],fHG021y[i]);
-      fHG022->Fill(fHG022x[i],fHG022y[i]); */
     }
     for(int i=0; i<int(fLHpi.size()); i++)
     {
@@ -4066,8 +3044,6 @@ int main(int argc, char **argv) // main function
        << '|' << setw(15) << fKplus_true << '|' << setw(15) << fKminus_true
        << '|' << setw(15) << fPplus_true << '|' << setw(15) << fPminus_true << endl;
 
-
-  // test.close();
   count.close();
 
   return 0;

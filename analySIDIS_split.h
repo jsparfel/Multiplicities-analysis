@@ -151,10 +151,6 @@ Int_t fId_loose;
 Int_t fId_severe;
 Float_t fNu_max[3][12];
 Float_t fNu_min[3][12];
-vector<Float_t> fXv;
-vector<Float_t> fYv;
-vector<Float_t> fZv;
-vector<Float_t> fRv;
 Int_t fMuCharge;
 
 //Counting
@@ -207,15 +203,6 @@ Double_t fFilesNumber = 0;
 vector<Int_t> fPeriodBit;
 vector<string> fPeriodName;
 
-Float_t fInclusiveRCproton[30][19];
-Float_t fSemiInclusiveRCproton[9][6][14];
-
-Float_t fCepi[2][2][9][6][12];
-Float_t fCepiVtx[2][2][9][6][12][4];
-Float_t fCepiTh[2][2][9][6][12][8];
-Float_t fCepipT[2][2][9][6][12][10];
-
-
 //Binning
 Wrapper fBinning[9][6][12];
 Wrapper fBinning_zvtx[9][6][12][4];
@@ -239,10 +226,7 @@ Float_t fXrange[10] = {.004,.01,.02,.03,.04,.06,.1,.14,.18,.4};
 Float_t fYrange[7] = {.1,.15,.2,.3,.5,.7,.9};
 Float_t fRcutval[24] = {1.68812,1.6915,1.69572,1.69733,1.71178,1.74735,1.74682,1.7846,1.80058,1.81382,1.83367,1.84183,1.84587,1.8423,1.8376,1.8368,1.84023,1.84309,1.85645,1.86316,1.85021,1.84775,1.84463,1.84185};
 Int_t fFlag[3][9][5][12];
-Float_t fZ_bin_width[12] = {.05,.05,.05,.05,.05,.05,.05,.05,.05,.05,.05,.1};
-hadiden fRstudy[24];
-studyxy fRstudy_xy[24];
-studyxy fR_xy[24];
+Float_t fZ_bin_width[12] = {.05,.05,.05,.05,.05,.05,.05,.05,.05,.05,.05,.1};;
 
 //Draw
 
