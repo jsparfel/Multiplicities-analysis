@@ -5,15 +5,14 @@ This is a copy of "github.com/nipierre/Multiplicities.git".
 ## Summary
  1. [Building](#Building)
  2. [Flow](#Flow)
- 3. [Usage](#Usage)
- 4. [analySIDIS_split](#analySIDIS-split)
- 5. [analySIDIS_collect](#analySIDIS-collect)
- 6. [acceptance_split](#acceptance-split)
- 7. [acceptance_fuse](#acceptance-fuse)
- 8. [acceptance_collect](#acceptance-collect)
- 9. [submitJobs.py](#submitJobs.py)
- 10. [compMult](#compMult)
- 11. [compAcc](#compAcc)
+ 3. [analySIDIS_split](#analySIDIS-split)
+ 4. [analySIDIS_collect](#analySIDIS-collect)
+ 5. [acceptance_split](#acceptance-split)
+ 6. [acceptance_fuse](#acceptance-fuse)
+ 7. [acceptance_collect](#acceptance-collect)
+ 8. [submitJobs.py](#submitJobs.py)
+ 9. [compMult](#compMult)
+ 10. [compAcc](#compAcc)
 
 ## Building
 
@@ -45,7 +44,6 @@ Takes the TTree and does the cut of the analysis. Outputs DIS Event and Hadron c
  - **RICH matrices to be used: e.g. `#define mat_RICH_2016_name "data/rich_mat_2016_julien.txt"` and `#define err_RICH_name "data/rich_mat_error_julien.txt"`**
 
 **In File Flags (see beginning of `analySIDIS_split.cc`):**
- - **Data year: e.g. `#define Y2016 1` to treat 2016 data**
  - **Momentum Boundaries**
  - **X Boundaries**
  - **Y Boundaries**
