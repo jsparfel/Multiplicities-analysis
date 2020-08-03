@@ -28,14 +28,10 @@ ifeq ($(DEBUG),1)
 CCFLAGS += -DDEBUG
 endif
 
-all : analySIDIS acceptance comparison extractor plotter dvm
+all : analySIDIS acceptance comparison
 analySIDIS : analySIDIS_split analySIDIS_collect
 acceptance : accsplit accfuse acccollect
-comparison : compRDRD compMCRD compMCMC compMult compAcc
-extractor : FFExtractor FFPlotter
-plotter : plotMult
-dvm : DVM
-
+comparison : compMult compAcc
 
 %.o: %.cc %.h
 	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -c -o $@ $<
@@ -59,16 +55,6 @@ acccollect: acceptance_collect.cc acceptance_collect.h
 	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $<
 	@echo 'Acceptance package built !'
 
-compRDRD: compRDRD.cc compRDRD.h
-	@echo 'Building RD/RD.RD/MC.MC/MC.Mult/Mult package..'
-	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $<
-
-compMCRD: compMCRD.cc compMCRD.h
-	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $<
-
-compMCMC: compMCMC.cc compMCMC.h
-	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $<
-
 compAcc: compAcc.cc compAcc.h
 	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $<
 
@@ -76,23 +62,5 @@ compMult: compMult.cc compMult.h
 	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $<
 	@echo 'RD/RD.RD/MC.MC/MC.Mult/Mult package built !'
 
-FFExtractor: FFExtractor.cc FFExtractor.h
-	@echo 'Building FF extraction package..'
-	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $< $(LHAPDF_LIBS) $(LHAPDF_INCL)
-
-FFPlotter: FFPlotter.cc FFPlotter.h
-	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $< $(LHAPDF_LIBS) $(LHAPDF_INCL)
-	@echo 'FF extraction package built !'
-
-plotMult: plotMult.cc plotMult.h
-	@echo 'Building plotting device package..'
-	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $< $(LHAPDF_LIBS) $(LHAPDF_INCL)
-	@echo 'Plotting device package built !'
-
-DVM: DVM.cc DVM.h
-	@echo 'Building DVM package..'
-	@$(CXX) $(CCFLAGS) $(ROOTFLAGS) $(ROOTVERSION) -o $@ $<
-	@echo 'DVM package built !'
-
 clean :
-	@rm -rf *.o accsplit accfuse acccollect analySIDIS_split analySIDIS_collect compRDRD compMCRD compMCMC compAcc compMult FFExtractor FFPlotter plotMult DVM
+	@rm -rf *.o accsplit accfuse acccollect analySIDIS_split analySIDIS_collect  compAcc compMult
