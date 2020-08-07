@@ -95,7 +95,7 @@ Takes the output of `analySIDIS_split` (and of `acceptance_collect` if acceptanc
 **Requires:**
  - **Output of `analySIDIS_split` in `./rawmult/2016/` where `.` denotes the directory from which `analySIDIS_collect` is launched**
  - **If acceptance correction activated, output from `acceptance_collect` in `./Multiplicities/acceptance/2016/`**
- - **Inclusive and Semi-inclusive Radiative Corrections: file `./data/proton_semi_inclusive_RC.txt`**
+ - **Inclusive and Semi-inclusive Radiative Corrections: file `./data/rad_corr.txt`**
  - **Diffractive Vector Meson Correction: file `./data/DVM_2016.dat`**
 
 **In File Flags**
